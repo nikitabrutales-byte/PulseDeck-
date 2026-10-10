@@ -1,0 +1,49 @@
+
+name: Build PulseDeck Android
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Extract project
+        run: |
+          mkdir -p /tmp/pulsedeck
+          unzip -q PulseDeck_Android_Project_with_Cloud_Build.zip -d /tmp/pulsedeck
+          find /tmp/pulsedeck -name gradlew -type f
+          test -n "$(find /tmp/pulsedeck -name gradlew -type f -print -quit)"
+
+      - name: Build APK
+        run: |
+          GRADLEW="$(find /tmp/pulsedeck -name gradlew -type f -print -quit)"
+          cd "$(dirname "$GRADLEW")"
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PulseDeck-Android-APK
+          path: /tmp/pulsedeck/**/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+          
