@@ -1,10 +1,10 @@
-
 name: Build PulseDeck Android
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -13,51 +13,53 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
-     
-      
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: |
-            platform-tools
-            platforms;android-36
-            build-tools;36.0.0
-            
-        uses: android-actions/setup-android@v3
-        with:
-                    packages: "platform-tools,platforms;android-36,build-tools;36.0.0"
-            platform-tools
-            platforms;android-36
-            build-tools;36.0.0
 
-      - name: Extract project
+      - name: Install Android SDK packages
         run: |
-          mkdir -p /tmp/pulsedeck
-          unzip -q PulseDeck_Android_Project_with_Cloud_Build.zip -d /tmp/pulsedeck
-          find /tmp/pulsedeck -name gradlew -type f
-          test -n "$(find /tmp/pulsedeck -name gradlew -type f -print -quit)"
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Build APK
+      - name: Find Android project
+        id: project
+        shell: bash
         run: |
-          GRADLEW="$(find /tmp/pulsedeck -name gradlew -type f -print -quit)"
-          cd "$(dirname "$GRADLEW")"
-          chmod +x gradlew
+          if [ -f "PulseDeck_Android_Project_with_Cloud_Build.zip" ]; then
+            mkdir -p /tmp/pulsedeck
+            unzip -q "PulseDeck_Android_Project_with_Cloud_Build.zip" -d /tmp/pulsedeck
+            PROJECT_ROOT="$(find /tmp/pulsedeck -type f -name gradlew -print -quit | xargs -r dirname)"
+          else
+            PROJECT_ROOT="$(find . -type f -name gradlew -not -path './.git/*' -print -quit | xargs -r dirname)"
+          fi
+
+          if [ -z "$PROJECT_ROOT" ] || [ ! -f "$PROJECT_ROOT/gradlew" ]; then
+            echo "ERROR: Gradle wrapper (gradlew) was not found. Ensure the Android project or PulseDeck_Android_Project_with_Cloud_Build.zip is in the repository."
+            exit 1
+          fi
+
+          echo "project_root=$PROJECT_ROOT" >> "$GITHUB_OUTPUT"
+          echo "Android project found at: $PROJECT_ROOT"
+
+      - name: Build debug APK
+        working-directory: ${{ steps.project.outputs.project_root }}
+        run: |
+          chmod +x ./gradlew
           ./gradlew --no-daemon assembleDebug
 
-      - name: Upload APK
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: PulseDeck-Android-APK
-          path: /tmp/pulsedeck/**/app/build/outputs/apk/debug/*.apk
+          path: '**/build/outputs/apk/debug/*.apk'
           if-no-files-found: error
           retention-days: 14
-          
